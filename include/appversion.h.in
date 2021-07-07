@@ -1,0 +1,5 @@
+#pragma once
+
+#define PROGRAME_NAME "@PROJECT_NAME@"
+#define PROGRAME_DESC "@PROJECT_DESCRIPTION@"
+#define _(str) (str)
