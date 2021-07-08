@@ -146,7 +146,11 @@ void DotFile::sync() {
         if(!scan) continue;
         // 如果是文件则直接进行同步操作
         if(!fs::is_directory(topPath)) {
-            fs::copy(topPath, fmt::format("/etc/{}/backup", PROGRAME_NAME) + topPath.string());
+            auto des = fs::path(fmt::format("/etc/{}/backup", PROGRAME_NAME) + topPath.string());
+            if(!fs::exists(des.remove_filename())) getStdOut(fmt::format(R"RRR(mkdir -p {})RRR", des.string()));
+            spdlog::debug("拷贝文件 {} 到 {}",topPath.string(), des.string());
+            auto cpOut = getStdOut(fmt::format(R"RRR(cp {} {})RRR", topPath.string(), des.string()));
+            if(cpOut.length()) spdlog::info(cpOut);
             continue;
         }
         // 如果是路径则列出当前路径的文件并添加

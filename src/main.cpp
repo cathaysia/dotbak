@@ -43,6 +43,11 @@ int main(int argc, char** argv) {
         dotFile.remove(vm["exclude"].as<std::string>());
         for(auto& file: std::get<2>(shareData)) { dotFile.remove(file); }
     }
+    spdlog::debug("检查 backup 选项");
+    if(vm.count("backup")){
+        dotFile.sync();
+        exit(EXIT_SUCCESS);
+    }
 
     return 0;
 }
@@ -61,6 +66,7 @@ ShareData set_program_options(int argc, char** argv) {
 //         ("regex,r"  ,po::value<std::string>(),_("--add with regex support"))
         // 从同步列表中排除一个文件
         ("exclude,e", po::value<std::string>(), _("exclude a file from sync list"))
+        ("backup,b", po::value<bool>()->default_value(false), _("Backup file"))
     ;
     //clang-format on
     po::variables_map vm;
