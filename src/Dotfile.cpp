@@ -5,6 +5,7 @@
 #include <stack>
 #include <utility>
 #include <vector>
+#include <deque>
 
 #include <fmt/format.h>
 #include <inicpp.h>
@@ -64,14 +65,18 @@ void DotFile::add(std::string const& fileName, bool isRegex) {
         spdlog::debug("对路径进行递归查看");
         std::stack<fs::path> dirList;
         dirList.push(path);
-        for(auto& file: dirList.top()) {
+        for(auto& file: fs::directory_iterator(dirList.top())) {
             dirList.pop();
             if(fs::is_directory(file)) dirList.push(file);
 
-            auto acls  = getAcls(file);
-            auto perms = getPermission(file);
-            if(acls != iniFile[filePath][Config::acls].as<std::string>()) { iniFile[file][Config::acls] = acls; }
-            if(perms != iniFile[filePath][Config::perms].as<std::string>()) { iniFile[file][Config::perms] = perms; }
+            auto acls  = getAcls(file.path());
+            auto perms = getPermission(file.path());
+            if(acls != iniFile[filePath][Config::acls].as<std::string>()) {
+                iniFile[file.path()][Config::acls] = acls;
+            }
+            if(perms != iniFile[filePath][Config::perms].as<std::string>()) {
+                iniFile[file.path()][Config::perms] = perms;
+            }
         }
     }
 
@@ -126,22 +131,27 @@ void DotFile::sync() {
     if(!fs::exists(configPath)) return;
     ini::IniFile iniFile;
     iniFile.load(configPath);
-    std::vector<std::string> includes;
+    std::deque<std::string> includes;
     boost::split(includes,iniFile[Config::defaults][Config::includes].as<std::string>(), boost::is_any_of(";"));
     std::vector<std::string> excludes;
     boost::split(excludes, iniFile[Config::defaults][Config::excludes].as<std::string>(), boost::is_any_of(";"));
-    for(auto& topPath : includes){
-        includes.erase(includes.begin(), ++includes.begin());
-        static bool scan = true;
-        std::for_each(excludes.begin(), excludes.end(), [&](std::string const& item){
+    // 对路径进行遍历
+    while(includes.size()) {
+        fs::path topPath = includes.at(0);
+        includes.pop_front();
+        bool scan = true;
+        std::for_each(excludes.begin(), excludes.end(), [&](std::string const& item) {
             if(item == topPath) scan = false;
         });
         if(!scan) continue;
-        if(fs::is_directory(fs::path(topPath))) includes.push_back(topPath);
-        // 对文件夹进行迭代
-        for(auto& file : fs::path(topPath)){
-            if(fs::is_directory(file)) includes.push_back(topPath);
-            // 执行同步操作
+        // 如果是文件则直接进行同步操作
+        if(!fs::is_directory(topPath)) {
+            fs::copy(topPath, fmt::format("/etc/{}/backup", PROGRAME_NAME) + topPath.string());
+            continue;
+        }
+        // 如果是路径则列出当前路径的文件并添加
+        for(auto& file : fs::directory_iterator(topPath)) {
+            includes.push_back(file.path());
         }
     }
 }
