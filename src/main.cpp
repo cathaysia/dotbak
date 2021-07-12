@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
         for(auto& file: std::get<2>(shareData)) { dotFile.remove(file); }
     }
     spdlog::debug("检查 backup 选项");
-    if(vm.count("backup")){
+    if(vm.count("backup")) {
         dotFile.sync();
         exit(EXIT_SUCCESS);
     }

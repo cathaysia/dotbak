@@ -26,6 +26,5 @@ protected:
     std::string getAcls(std::string const& fileName);
     std::string getPermission(std::string const& fileName);
     std::string getFilePath(std::string const& fileName);
-public:
     std::string getStdOut(std::string const& cmd);
 };

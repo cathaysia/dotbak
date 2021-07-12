@@ -1,11 +1,11 @@
 #include "Dotfile.h"
 
+#include <deque>
 #include <filesystem>
 #include <regex>
 #include <stack>
 #include <utility>
 #include <vector>
-#include <deque>
 
 #include <fmt/format.h>
 #include <inicpp.h>
@@ -71,9 +71,7 @@ void DotFile::add(std::string const& fileName, bool isRegex) {
 
             auto acls  = getAcls(file.path());
             auto perms = getPermission(file.path());
-            if(acls != iniFile[filePath][Config::acls].as<std::string>()) {
-                iniFile[file.path()][Config::acls] = acls;
-            }
+            if(acls != iniFile[filePath][Config::acls].as<std::string>()) { iniFile[file.path()][Config::acls] = acls; }
             if(perms != iniFile[filePath][Config::perms].as<std::string>()) {
                 iniFile[file.path()][Config::perms] = perms;
             }
@@ -109,7 +107,8 @@ void DotFile::remove(const std::string& fileName) {
 }
 
 std::string DotFile::getAcls(std::string const& fileName) {
-    return getStdOut(fmt::format(R"RRR(getfacl {} | egrep -v "(file:)|(flags:)" | tr "\n" ";" | sed 's/;;/\n/g' | sed 's/# //g')RRR", fileName));
+    return getStdOut(fmt::format(
+        R"RRR(getfacl {} | egrep -v "(file:)|(flags:)" | tr "\n" ";" | sed 's/;;/\n/g' | sed 's/# //g')RRR", fileName));
 }
 std::string DotFile::getPermission(std::string const& fileName) {
     return getStdOut(fmt::format(R"RRR(ls -al {} | awk '{{print $1}}' | sed 's/.//' | sed 's/.$//')RRR", fileName));
@@ -132,7 +131,7 @@ void DotFile::sync() {
     ini::IniFile iniFile;
     iniFile.load(configPath);
     std::deque<std::string> includes;
-    boost::split(includes,iniFile[Config::defaults][Config::includes].as<std::string>(), boost::is_any_of(";"));
+    boost::split(includes, iniFile[Config::defaults][Config::includes].as<std::string>(), boost::is_any_of(";"));
     std::vector<std::string> excludes;
     boost::split(excludes, iniFile[Config::defaults][Config::excludes].as<std::string>(), boost::is_any_of(";"));
     // 对路径进行遍历
@@ -148,19 +147,25 @@ void DotFile::sync() {
         if(!fs::is_directory(topPath)) {
             auto des = fs::path(fmt::format("/etc/{}/backup", PROGRAME_NAME) + topPath.string());
             if(!fs::exists(des.remove_filename())) getStdOut(fmt::format(R"RRR(mkdir -p {})RRR", des.string()));
-            spdlog::debug("拷贝文件 {} 到 {}",topPath.string(), des.string());
+            spdlog::debug("拷贝文件 {} 到 {}", topPath.string(), des.string());
             auto cpOut = getStdOut(fmt::format(R"RRR(cp {} {})RRR", topPath.string(), des.string()));
             if(cpOut.length()) spdlog::info(cpOut);
             continue;
         }
         // 如果是路径则列出当前路径的文件并添加
-        for(auto& file : fs::directory_iterator(topPath)) {
-            includes.push_back(file.path());
-        }
+        for(auto& file: fs::directory_iterator(topPath)) { includes.push_back(file.path()); }
     }
 }
 void DotFile::restore() {
     // 根据 /etc/dotbak/dotbak.ini 将文件恢复到原路径，并恢复文件权限
+    getStdOut(R"RRR(cp {} / -r)RRR", fmt::format("/etc/{0}/backup/", PROGRAME_NAME));
+    // 恢复文件权限
+    auto configPath = fmt::format("/etc/{0}/{0}.ini", PROGRAME_NAME);
+    if(!fs::exists(configPath)) return;
+    ini::IniFile iniFile;
+    iniFile.load(configPath);
+    iniFile.
+
 }
 
 /***
@@ -168,13 +173,12 @@ void DotFile::restore() {
  */
 std::string DotFile::getStdOut(const std::string& cmd) {
     bp::ipstream is;
-    auto cmdString = fmt::format(R"RRR(bash -c "echo `env LANG=en_US.UTF-8 {}`")RRR", cmd);
+    auto         cmdString = fmt::format(R"RRR(bash -c "echo `env LANG=en_US.UTF-8 {}`")RRR", cmd);
     spdlog::debug(fmt::format("执行的命令是： {}", cmdString));
     // 使用英文环境
     bp::child                c(cmdString, bp::std_out > is);
     std::vector<std::string> data;
     std::string              line;
-
     while(c.running() && std::getline(is, line) && !line.empty()) data.push_back(line);
     return boost::join(data, "\n");
 }
