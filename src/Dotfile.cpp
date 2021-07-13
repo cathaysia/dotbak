@@ -106,9 +106,23 @@ void DotFile::remove(const std::string& fileName) {
     spdlog::debug("现在包含列表为 {}", iniFile[Config::defaults][Config::includes].as<std::string>());
 }
 
+/**
+权限为：
+# file: 1
+# owner: tea
+# group: tea
+user::rw-
+user:root:rwx
+group::r--
+group:docker:rwx
+mask::rwx
+other::rwx
+输出为：
+user:root:rwx;group:docker:rwx;other::rwx
+ */
 std::string DotFile::getAcls(std::string const& fileName) {
     return getStdOut(fmt::format(
-        R"RRR(getfacl {} | egrep -v "(file:)|(flags:)" | tr "\n" ";" | sed 's/;;/\n/g' | sed 's/# //g')RRR", fileName));
+        R"RRR(getfacl {} | egrep -v "(file:)|(flags:)|(user::)|(group::)|(owner: )|(group: )|(mask::)" | tr "\n" ";" | sed 's/;;/\n/g' | sed 's/# //g')RRR", fileName));
 }
 std::string DotFile::getPermission(std::string const& fileName) {
     return getStdOut(fmt::format(R"RRR(ls -al {} | awk '{{print $1}}' | sed 's/.//' | sed 's/.$//')RRR", fileName));
@@ -158,14 +172,59 @@ void DotFile::sync() {
 }
 void DotFile::restore() {
     // 根据 /etc/dotbak/dotbak.ini 将文件恢复到原路径，并恢复文件权限
-    getStdOut(R"RRR(cp {} / -r)RRR", fmt::format("/etc/{0}/backup/", PROGRAME_NAME));
+    getStdOut(fmt::format("cp -r /etc/{0}/backup/ /", PROGRAME_NAME));
+    return;
     // 恢复文件权限
     auto configPath = fmt::format("/etc/{0}/{0}.ini", PROGRAME_NAME);
     if(!fs::exists(configPath)) return;
     ini::IniFile iniFile;
     iniFile.load(configPath);
-    iniFile.
+    // 获取需要恢复权限的文件的列表
+    auto fileListString =
+        getStdOut(fmt::format(R"RRR(cat {} | grep '\[' | sed 's/\[//g' | sed 's/\]//g')RRR", configPath));
+    std::vector<std::string> fileList;
+    boost::split(fileList, fileListString, boost::is_any_of("\n"));
+    spdlog::debug("需要恢复权限的文件列表为： [{}]", boost::join(fileList, ";"));
+    for(const auto& file: fileList) {
+        if(!(iniFile[file][Config::perms].as<std::string>().length()
+             || iniFile[file][Config::acls].as<std::string>().length()))
+            continue;
+        // 清空权限
+        getStdOut(fmt::format(R"RRR(setfacl -k {})RRR", file));
+        getStdOut(fmt::format(R"RRR(chmod 000 {})RRR", file));
+        /**
+         * todo
+         * 将文件权限解析为数字形式，并且只使用 acl 权限
+         */
+        auto perms = iniFile[file][Config::perms].as<std::string>();
+        // 恢复用户权限
+        for(int i = 0; i < 3; ++i) {
+            // suid
+            if(perms[i] == 'S' || perms[i] == 's') getStdOut(fmt::format(R"RRR(chmod g+s {})RRR", file));
+            if(perms[i] == 'r') getStdOut(fmt::format(R"RRR(chmod u+r {})RRR", file));
+            if(perms[i] == 'w') getStdOut(fmt::format(R"RRR(chmod u+w {})RRR", file));
+            if(perms[i] == 'x') getStdOut(fmt::format(R"RRR(chmod u+x {})RRR", file));
+        }
+        // 恢复组权限
+        for(int i = 3; i < 6; ++i) {
+            // sgid
+            if(perms[i] == 'S' || perms[i] == 's') getStdOut(fmt::format(R"RRR(chmod u+s {})RRR", file));
+            if(perms[i] == 'r') getStdOut(fmt::format(R"RRR(chmod g+r {})RRR", file));
+            if(perms[i] == 'w') getStdOut(fmt::format(R"RRR(chmod g+w {})RRR", file));
+            if(perms[i] == 'x') getStdOut(fmt::format(R"RRR(chmod g+x {})RRR", file));
+        }
+        // 恢复 others 权限
+        for(int i = 6; i < 9; ++i) {
+            // sticky
+            if(perms[i] == 't') getStdOut(fmt::format(R"RRR(chmod o+t {})RRR", file));
+            if(perms[i] == 'r') getStdOut(fmt::format(R"RRR(chmod o+r {})RRR", file));
+            if(perms[i] == 'w') getStdOut(fmt::format(R"RRR(chmod o+w {})RRR", file));
+            if(perms[i] == 'x') getStdOut(fmt::format(R"RRR(chmod o+x {})RRR", file));
+        }
+        // 恢复 acls 权限
+        std::vector<std::string> acls;
 
+    }
 }
 
 /***
