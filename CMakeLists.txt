@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 include(FeatureSummary)
 
-
 add_subdirectory(include)
 include_directories(${PROJECT_BINARY_DIR}/include)
 add_subdirectory(src)

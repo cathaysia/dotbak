@@ -1,12 +1,16 @@
 #include "Dotfile.h"
 
+#include <boost/algorithm/string/replace.hpp>
+#include <boost/exception/exception.hpp>
 #include <deque>
 #include <filesystem>
 #include <regex>
 #include <stack>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include <fmt/core.h>
 #include <fmt/format.h>
 #include <inicpp.h>
 #include <spdlog/spdlog.h>
@@ -17,6 +21,8 @@
 
 namespace fs = std::filesystem;
 namespace bp = boost::process;
+
+inline int permToI(const char p);
 
 void DotFile::init() {
     // 配置文件位于 /etc/PROGRAME_NAME/PROGRAME_NAME.json
@@ -107,22 +113,26 @@ void DotFile::remove(const std::string& fileName) {
 }
 
 /**
-权限为：
+  权限为：
 # file: 1
 # owner: tea
 # group: tea
-user::rw-
+# flags: sst
+user::rwx
 user:root:rwx
 group::r--
 group:docker:rwx
 mask::rwx
 other::rwx
 输出为：
-user:root:rwx;group:docker:rwx;other::rwx
- */
+flags: sst;user::rwx;user:root:rwx;group::r--;group:docker:rwx;other::rwx
+数字权限为：
+7777
+*/
 std::string DotFile::getAcls(std::string const& fileName) {
     return getStdOut(fmt::format(
-        R"RRR(getfacl {} | egrep -v "(file:)|(flags:)|(user::)|(group::)|(owner: )|(group: )|(mask::)" | tr "\n" ";" | sed 's/;;/\n/g' | sed 's/# //g')RRR", fileName));
+                R"RRR(getfacl {} | egrep -v "(file:)|(owner: )|(group: )|(mask)" | tr "\n" ";" | sed 's/;;/\n/g' | sed 's/# //g')RRR",
+                fileName));
 }
 std::string DotFile::getPermission(std::string const& fileName) {
     return getStdOut(fmt::format(R"RRR(ls -al {} | awk '{{print $1}}' | sed 's/.//' | sed 's/.$//')RRR", fileName));
@@ -154,8 +164,8 @@ void DotFile::sync() {
         includes.pop_front();
         bool scan = true;
         std::for_each(excludes.begin(), excludes.end(), [&](std::string const& item) {
-            if(item == topPath) scan = false;
-        });
+                if(item == topPath) scan = false;
+                });
         if(!scan) continue;
         // 如果是文件则直接进行同步操作
         if(!fs::is_directory(topPath)) {
@@ -187,7 +197,7 @@ void DotFile::restore() {
     spdlog::debug("需要恢复权限的文件列表为： [{}]", boost::join(fileList, ";"));
     for(const auto& file: fileList) {
         if(!(iniFile[file][Config::perms].as<std::string>().length()
-             || iniFile[file][Config::acls].as<std::string>().length()))
+                    || iniFile[file][Config::acls].as<std::string>().length()))
             continue;
         // 清空权限
         getStdOut(fmt::format(R"RRR(setfacl -k {})RRR", file));
@@ -196,33 +206,7 @@ void DotFile::restore() {
          * todo
          * 将文件权限解析为数字形式，并且只使用 acl 权限
          */
-        auto perms = iniFile[file][Config::perms].as<std::string>();
-        // 恢复用户权限
-        for(int i = 0; i < 3; ++i) {
-            // suid
-            if(perms[i] == 'S' || perms[i] == 's') getStdOut(fmt::format(R"RRR(chmod g+s {})RRR", file));
-            if(perms[i] == 'r') getStdOut(fmt::format(R"RRR(chmod u+r {})RRR", file));
-            if(perms[i] == 'w') getStdOut(fmt::format(R"RRR(chmod u+w {})RRR", file));
-            if(perms[i] == 'x') getStdOut(fmt::format(R"RRR(chmod u+x {})RRR", file));
-        }
-        // 恢复组权限
-        for(int i = 3; i < 6; ++i) {
-            // sgid
-            if(perms[i] == 'S' || perms[i] == 's') getStdOut(fmt::format(R"RRR(chmod u+s {})RRR", file));
-            if(perms[i] == 'r') getStdOut(fmt::format(R"RRR(chmod g+r {})RRR", file));
-            if(perms[i] == 'w') getStdOut(fmt::format(R"RRR(chmod g+w {})RRR", file));
-            if(perms[i] == 'x') getStdOut(fmt::format(R"RRR(chmod g+x {})RRR", file));
-        }
-        // 恢复 others 权限
-        for(int i = 6; i < 9; ++i) {
-            // sticky
-            if(perms[i] == 't') getStdOut(fmt::format(R"RRR(chmod o+t {})RRR", file));
-            if(perms[i] == 'r') getStdOut(fmt::format(R"RRR(chmod o+r {})RRR", file));
-            if(perms[i] == 'w') getStdOut(fmt::format(R"RRR(chmod o+w {})RRR", file));
-            if(perms[i] == 'x') getStdOut(fmt::format(R"RRR(chmod o+x {})RRR", file));
-        }
-        // 恢复 acls 权限
-        std::vector<std::string> acls;
+        auto acls = iniFile[file][Config::acls].as<std::string>();
 
     }
 }
@@ -240,4 +224,61 @@ std::string DotFile::getStdOut(const std::string& cmd) {
     std::string              line;
     while(c.running() && std::getline(is, line) && !line.empty()) data.push_back(line);
     return boost::join(data, "\n");
+}
+
+std::string DotFile::calcPerms(std::string const& perms) {
+    /* 权限的数字形式一共有四种，除了传统的 rwx 生成的 777 之外，
+     * 在第零位再插入一个数字，分别代表：
+     * 1: SBIT t
+     * 2: SGID s
+     * 4: SUID s
+     * 如果文件没有 x 权限却被赋予了特殊权限，则形式为大写
+     * 特殊权限只有 owner 才有，其他的没有
+     *
+     */
+    std::string mainPerm;
+    int permInt = 0;
+    if(int pos = perms.find_first_of("flages")!=std::string::npos){
+        auto perm = perms.substr(pos, 10);
+        boost::replace_all(perm, "flags: ", "" );
+        if(perm[0]=='s') permInt |= 4;
+        if(perm[1] == 's' ) permInt |= 2;
+        if(perm[2] == 't' ) permInt |= 1;
+        mainPerm+=fmt::format("{}", permInt);
+    }
+    // 检查以下权限：
+    // user::rwx
+    permInt = 0;
+    auto uPos = perms.find_first_of("user::");
+    uPos += 6;
+    permInt |= permToI(perms[uPos++]);
+    permInt |= permToI(perms[uPos++]);
+    permInt |= permToI(perms[uPos++]);
+    mainPerm+=fmt::format("{}", permInt);
+    // group::r--
+    permInt = 0;
+    auto gPos = perms.find_first_of("group::");
+    uPos += 7;
+    permInt |= permToI(perms[uPos++]);
+    permInt |= permToI(perms[uPos++]);
+    permInt |= permToI(perms[uPos++]);
+    mainPerm+=fmt::format("{}", permInt);
+    // other::rwx
+    permInt = 0;
+    auto oPos = perms.find_first_of("other::");
+    uPos += 7;
+    permInt |= permToI(perms[uPos++]);
+    permInt |= permToI(perms[uPos++]);
+    permInt |= permToI(perms[uPos++]);
+    mainPerm += fmt::format("{}", permInt);
+
+    // 返回形式为 1770; 770
+    return mainPerm;
+}
+
+int permToI(const char p){
+    if(p=='r') return 1;
+    if(p=='w') return 2;
+    if(p=='x') return 4;
+    throw std::runtime_error(fmt::format("出现了错误权限： {}", p));
 }

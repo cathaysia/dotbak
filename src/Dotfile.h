@@ -27,4 +27,6 @@ protected:
     std::string getPermission(std::string const& fileName);
     std::string getFilePath(std::string const& fileName);
     std::string getStdOut(std::string const& cmd);
+    // 将 acl 列表转换为数字形式
+    std::string calcPerms(std::string const& perms);
 };
