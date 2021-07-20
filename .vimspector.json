@@ -1,0 +1,11 @@
+{
+  "configurations": {
+    "launch": {
+      "adapter": "vscode-cpptools",
+      "configuration": {
+        "request": "launch",
+        "program": "${workspaceRoot}/build/Debug/test/main_test"
+      }
+    }
+  }
+}

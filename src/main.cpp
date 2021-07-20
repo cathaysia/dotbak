@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
         dotFile.sync();
         exit(EXIT_SUCCESS);
     }
-
+    std::cout << std::get<0>(shareData) << std::endl;
     return 0;
 }
 
@@ -63,11 +63,11 @@ ShareData set_program_options(int argc, char** argv) {
          *@todo
          * 使用正则表达式匹配文件
          */
-//         ("regex,r"  ,po::value<std::string>(),_("--add with regex support"))
+        //         ("regex,r"  ,po::value<std::string>(),_("--add with regex support"))
         // 从同步列表中排除一个文件
         ("exclude,e", po::value<std::string>(), _("exclude a file from sync list"))
         ("backup,b", po::value<bool>()->default_value(false), _("Backup file"))
-    ;
+        ;
     //clang-format on
     po::variables_map vm;
     auto parsed = po::command_line_parser(argc, argv).options(desc).allow_unregistered().run();
@@ -75,9 +75,9 @@ ShareData set_program_options(int argc, char** argv) {
     po::notify(vm);
 
     auto unregistered = po::collect_unrecognized(parsed.options,
-po::include_positional);
+            po::include_positional);
     for(auto &unknow : unregistered){
-    spdlog::debug("未知选项为： {}", unknow);
+        spdlog::debug("未知选项为： {}", unknow);
 
     }
     return ShareData(std::move(desc), std::move(vm), std::move(unregistered));
