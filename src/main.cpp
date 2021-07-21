@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <regex>
@@ -40,15 +41,19 @@ int main(int argc, char** argv) {
         for(auto& file: std::get<2>(shareData)) { dotFile.add(file, vm.count("regex")); }
     }
     if(vm.count("exclude")) {
-        dotFile.remove(vm["exclude"].as<std::string>());
-        for(auto& file: std::get<2>(shareData)) { dotFile.remove(file); }
+        dotFile.exclude(vm["exclude"].as<std::string>());
+        for(auto& file: std::get<2>(shareData)) { dotFile.exclude(file); }
     }
-    spdlog::debug("检查 backup 选项");
     if(vm.count("backup")) {
+        spdlog::debug("备份文件");
         dotFile.sync();
         exit(EXIT_SUCCESS);
     }
-    std::cout << std::get<0>(shareData) << std::endl;
+    if(vm.count("restore")) {
+        spdlog::debug("恢复文件");
+        dotFile.restore();
+        exit(EXIT_SUCCESS);
+    }
     return 0;
 }
 
@@ -66,7 +71,8 @@ ShareData set_program_options(int argc, char** argv) {
         //         ("regex,r"  ,po::value<std::string>(),_("--add with regex support"))
         // 从同步列表中排除一个文件
         ("exclude,e", po::value<std::string>(), _("exclude a file from sync list"))
-        ("backup,b", po::value<bool>()->default_value(false), _("Backup file"))
+        ("backup,b", po::value<bool>(), _("Backup file"))
+        ("restore,r", po::value<bool>(), _("restore file"))
         ;
     //clang-format on
     po::variables_map vm;
