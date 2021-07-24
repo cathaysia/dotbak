@@ -9,10 +9,8 @@ int main(int argc, char** argv){
 
 TEST(RESTORE, PRIVILAGE) {
     struct TestDotFile : public DotFile {
-        const std::string PubCalcPerms(const std::string& perms) {
-            return this->calcPerms(perms);
-        }
+        using DotFile::calcPerms;
     } testDot;
     std::string str = "user::rwx;group::r--;other:rwx";
-    ASSERT_STREQ(testDot.PubCalcPerms("user::rwx;group::r--;other::rwx").c_str(), "747");
+    ASSERT_STREQ(testDot.calcPerms("user::rwx;group::r--;other::rwx").c_str(), "747");
 }
