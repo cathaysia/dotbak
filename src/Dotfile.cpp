@@ -4,6 +4,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/exception/exception.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/process/system.hpp>
 #include <cassert>
 #include <cstdio>
@@ -26,8 +27,7 @@
 
 #include <appversion.h>
 
-namespace fs = std::filesystem;
-namespace bp = boost::process;
+namespace fs = boost::filesystem;
 
 inline int permToI(const char p);
 
@@ -75,17 +75,12 @@ void DotFile::add(std::string const& fileName, bool isRegex) {
     fs::path path(filePath);
     if(fs::is_directory(path)) {
         spdlog::debug("对路径 {} 进行递归查看", path.string());
-        std::stack<fs::path> dirList;
-        dirList.push(path);
-        for(auto& file: dirList.top()) {
-            // 这里现在暂时跳过
-            break;
-            dirList.pop();
-            if(fs::is_directory(fs::path(file))) dirList.push(file);
-            auto acls = getAcls(file);
-            if(acls != mainAcls) iniFile[file][Config::acls] = acls;
+        auto list = fs::recursive_directory_iterator(path);
+        for(auto& file: list){
+            auto acls = getAcls(file.path().string());
+            if(acls != mainAcls) iniFile[file.path().string()][Config::acls] = acls;
         }
-    }
+   }
 
     iniFile.save(configPath);
     spdlog::debug("现在包含列表为 {}", iniFile[Config::defaults][Config::includes].as<std::string>());
@@ -186,7 +181,7 @@ void DotFile::sync() {
             });
             if(!addFile) continue;
 
-            includes.push_back(file.path());
+            includes.push_back(file.path().string());
         }
     }
 }
