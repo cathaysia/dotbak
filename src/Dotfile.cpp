@@ -69,18 +69,19 @@ void DotFile::add(std::string const& fileName, bool isRegex) {
     iniFile[Config::defaults][Config::includes] = fmt::format("{0}{1};", oldString, filePath);
 
     // 查看文件权限
-    auto mainAcls                   = getAcls(filePath);
-    iniFile[filePath][Config::acls] = mainAcls;
+    auto mainAcls                                                        = getAcls(filePath);
+    iniFile[boost::replace_all_copy(filePath, "#", "\\#")][Config::acls] = mainAcls;
     // 如果是文件夹，则向下查看所有与文件夹权限不一样的文件
     fs::path path(filePath);
     if(fs::is_directory(path)) {
         spdlog::debug("对路径 {} 进行递归查看", path.string());
         auto list = fs::recursive_directory_iterator(path);
-        for(auto& file: list){
+        for(auto& file: list) {
             auto acls = getAcls(file.path().string());
-            if(acls != mainAcls) iniFile[file.path().string()][Config::acls] = acls;
+            if(acls != mainAcls)
+                iniFile[boost::replace_all_copy(file.path().string(), "#", "\\#")][Config::acls] = acls;
         }
-   }
+    }
 
     iniFile.save(configPath);
     spdlog::debug("现在包含列表为 {}", iniFile[Config::defaults][Config::includes].as<std::string>());
