@@ -78,6 +78,8 @@ void DotFile::add(std::string const& fileName, bool isRegex) {
         std::stack<fs::path> dirList;
         dirList.push(path);
         for(auto& file: dirList.top()) {
+            // 这里现在暂时跳过
+            break;
             dirList.pop();
             if(fs::is_directory(fs::path(file))) dirList.push(file);
             auto acls = getAcls(file);
