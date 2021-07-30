@@ -201,7 +201,7 @@ void DotFile::restore() {
         runBash(fmt::format(R"RRR(cat {} | grep '\['| sed 's/\[//g' | sed 's/\]//g')RRR", configPath));
     std::vector<std::string> fileList;
     boost::split(fileList, fileListString, boost::is_any_of(" "));
-    for(auto it = fileList.begin(); it!=fileList.end(); ++it){
+    for(auto it = fileList.begin(); it != fileList.end(); ++it) {
         if(*it == Config::defaults) fileList.erase(it);
     }
     spdlog::debug("需要恢复权限的文件列表为： [{}]", boost::join(fileList, ";"));
@@ -215,7 +215,7 @@ void DotFile::restore() {
          * todo
          * 将文件权限解析为数字形式，并且只使用 acl 权限
          */
-        auto acls     = iniFile[file][Config::acls].as<std::string>();
+        auto acls = iniFile[file][Config::acls].as<std::string>();
         spdlog::debug("{}: 得到的 acl 权限为： {}", __FUNCTION__, acls);
         auto mainPerm = calcPerms(acls);
         runBash(fmt::format("chmod {0} {1}", mainPerm, file));
@@ -340,4 +340,3 @@ int permToI(const char p) {
     if(p == '-') return 0;
     throw std::runtime_error(fmt::format("出现了错误权限： {}", p));
 }
-
