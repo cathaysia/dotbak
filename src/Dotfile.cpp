@@ -93,6 +93,7 @@ void DotFile::exclude(const std::string& fileName) {
     iniFile.load(configPath);
 
     std::string filePath = getFilePath(fileName);
+    boost::replace_all(filePath, "#", "\\#");
     spdlog::debug("排除文件 {}", filePath);
     // 检查文件是否已经在列表中了
     auto oldString = iniFile[Config::defaults][Config::excludes].as<std::string>();
@@ -159,7 +160,7 @@ void DotFile::sync() {
     });
     // 对路径进行遍历
     while(includes.size()) {
-        fs::path topPath = includes.at(0);
+        fs::path topPath = boost::replace_all_copy(includes.at(0), "\\#", "#");
         includes.pop_front();
         if(!fs::exists(topPath)) continue;
         // 如果是文件则直接进行同步操作
@@ -178,7 +179,7 @@ void DotFile::sync() {
             // 检查文件是否在排除列表中
             bool addFile = true;
             std::for_each(excludes.begin(), excludes.end(), [&](std::string const& item) {
-                if(item == topPath) addFile = false;
+                if(boost::replace_all_copy(item, "\\#", "#") == topPath) addFile = false;
             });
             if(!addFile) continue;
 
@@ -202,6 +203,7 @@ void DotFile::restore() {
     for(auto it = fileList.begin(); it != fileList.end(); ++it) {
         if(*it == Config::defaults) fileList.erase(it);
     }
+    for(int i = 0; i < fileList.size(); ++i) boost::replace_all(fileList[i], "\\#", "#");
     spdlog::debug("需要恢复权限的文件列表为： [{}]", boost::join(fileList, ";"));
 
     for(const auto& file: fileList) {
